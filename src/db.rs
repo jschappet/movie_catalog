@@ -1,0 +1,20 @@
+use sqlx::{sqlite::SqlitePool, Pool, Sqlite};
+
+pub type DbPool = Pool<Sqlite>;
+
+pub async fn init_db(database_url: &str) -> DbPool {
+    let pool = SqlitePool::connect(database_url).await.expect("Failed to connect to the database");
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS movies (
+            id INTEGER PRIMARY KEY,
+            title TEXT NOT NULL,
+            metadata JSON
+        )
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("Failed to create table");
+    pool
+}
