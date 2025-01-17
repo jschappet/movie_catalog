@@ -141,8 +141,68 @@ async fn add_user(new_user: Json<User>, state: &State<AppState>) -> &'static str
 
 // Fallback to serve the `index.html` file when no route matches
 #[get("/")]
-async fn serve_index(state: &State<AppState>) -> Option<NamedFile> {
+async fn serve_index() -> Option<NamedFile> {
     NamedFile::open(Path::new("static/index.html")).await.ok()
+}
+
+async fn fetch_metadata(state: &AppState, title: &str) -> Result<String, reqwest::Error> {
+    let url = format!(
+        "http://www.omdbapi.com/?t={}&apikey={}",
+        title, state.omdb_api_key
+    );
+
+    let res = state
+        .client.get(&url)
+        .send().await?
+        .json::<serde_json::Value>().await?;
+    Ok(res.to_string())
+    /* Ok(MovieMetadata {
+        title: res["Title"].as_str().unwrap_or_default().to_string(),
+        year: res["Year"].as_str().unwrap_or_default().to_string(),
+        genre: res["Genre"].as_str().unwrap_or_default().to_string(),
+        director: res["Director"].as_str().unwrap_or_default().to_string(),
+        plot: res["Plot"].as_str().unwrap_or_default().to_string(),
+    })
+    */
+}
+// Handler for file uploads
+#[post("/upload", data = "<data>")]
+async fn upload_movies(state: &State<AppState>, data: String) -> &'static str {
+    let db = &state.db_pool;
+    
+    for title in data.titles {
+         
+        let meta = fetch_metadata(&state, title.as_str()).await;
+        match meta {
+            Ok(meta) => {
+                println!("{:?}", meta);
+
+                let metadata: MovieMetadata = serde_json::from_str(&meta)
+                    .expect("ERROR");
+
+                let metadata_json = to_string(&meta).expect("Failed to serialize metadata");
+                println!("{}", metadata_json);
+                sqlx::query("INSERT INTO movies (title, metadata) VALUES (?, ?)")
+                    .bind(title.clone())
+                    .bind(json!(metadata))
+                    .execute(db)
+                    .await
+                    .expect("Failed to insert movie");
+            
+                println!("Done Update: {}", title);
+            }
+            Err(e) => {
+                sqlx::query("INSERT INTO movies (title) VALUES (?)")
+                    .bind(title.clone())
+                    .execute(db)
+                    .await
+                    .expect("Failed to insert movie");
+                eprintln!("Failed to fetch metadata for {}: {:?}", title, e);
+                () // Wrap it in a vector to return it as JSON
+            }
+        }   
+    }
+    "Movies uploaded successfully!"
 }
 
 // Main Rocket launch function

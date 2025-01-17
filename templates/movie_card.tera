@@ -1,5 +1,5 @@
 {% for movie in movies %} 
-    <div class="movie-card" onclick="showPopup({{movie | json_encode | safe }})">
+    <div class="movie-card" onclick='showPopup({{movie | json_encode }})'>
         {% if movie.Poster  %}
         <div style="display: grid; grid-template-columns: repeat(2, 1fr);">
             <!-- Movie Poster -->
