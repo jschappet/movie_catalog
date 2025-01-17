@@ -1,0 +1,19 @@
+{% for movie in movies %} 
+    <div class="movie-card" onclick="showPopup()">
+        {% if movie.Poster  %}
+
+        <!-- Movie Poster -->
+        <img 
+            src="{{ movie.Poster }}" 
+            alt="{{ movie.Title }} Poster" 
+            style="width: 100%; border-radius: 8px;" 
+        />
+        {% endif %}
+
+        <!-- Movie Title -->
+        <div 
+            style="text-align: center; margin-top: 10px;">
+            {{ movie.Title }}
+        </div>
+    </div>
+{% endfor %}

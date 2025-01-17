@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Movie Metadata Viewer</title>
+    <script src="https://unpkg.com/htmx.org"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -64,9 +65,8 @@
             background: rgba(0, 0, 0, 0.5);
             z-index: 999;
         }
-
-
-        .movie-grid {
+    
+    .movie-grid {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
         gap: 20px;
@@ -105,7 +105,7 @@
 <body>
     <h1>Movie Metadata Viewer</h1>
 <!--     <ul id="movie-list"></ul>-->    
-     <div id="movie-grid" class="movie-grid"></div>
+     <div id="movie-grid" hx-get="/movies" hx-trigger="load"></div>
 
     <div class="overlay" id="overlay"></div>
     <div class="popup" id="popup">
@@ -120,51 +120,7 @@
     </div>
 
     <script>
-        // Fetch metadata from the server
-        async function fetchMetadata() {
-            console.log("Fetching metadata");
-            try {
-                const response = await fetch('/metadata');
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const data = await response.json();
-                const movieGrid = document.getElementById('movie-grid');
-                movieGrid.innerHTML = ''; // Clear existing content
 
-                data.forEach(movie => {
-                    // Create a div for each movie
-                    const movieDiv = document.createElement('div');
-                    movieDiv.className = 'movie-card';
-
-                    // Create an image element for the poster
-                    const img = document.createElement('img');
-                    img.src = movie.Poster; // Assuming the Poster field contains the image URL
-                    img.alt = `${movie.Title} Poster`;
-                    img.style.width = '100%'; // Make the image responsive
-                    img.style.borderRadius = '8px'; // Add some styling
-
-                    // Create a div for the title
-                    const titleDiv = document.createElement('div');
-                    titleDiv.textContent = movie.Title;
-                    titleDiv.style.textAlign = 'center'; // Center the text
-                    titleDiv.style.marginTop = '10px';
-
-                    // Add event listener for showing the popup
-                    movieDiv.addEventListener('click', () => showPopup(movie));
-
-                    // Append the image and title to the movie div
-                    movieDiv.appendChild(img);
-                    movieDiv.appendChild(titleDiv);
-
-                    // Append the movie div to the grid
-                    movieGrid.appendChild(movieDiv);
-                });
-            } catch (error) {
-                console.error("Error fetching metadata:", error);
-            }
-        }
- 
 
         // Show popup with metadata
         function showPopup(movie) {
@@ -185,11 +141,20 @@
             document.getElementById('popup').style.display = 'none';
         }
 
-        // Load metadata on page load
-        window.onload = fetchMetadata();
-
         // Close popup when clicking outside
         document.getElementById('overlay').addEventListener('click', closePopup);
     </script>
+<script>
+    document.addEventListener('htmx:beforeSwap', function (event) {
+        if (event.detail.xhr.status >= 400) {
+        event.preventDefault();
+        document.querySelector('.error')?.remove();
+        const errorDiv = document.createElement('div');
+        errorDiv.classList.add('error');
+        errorDiv.textContent = 'Something went wrong. Please try again.';
+        event.target.closest('form').appendChild(errorDiv);
+        }
+    });
+</script>
 </body>
 </html>
