@@ -1,19 +1,25 @@
 {% for movie in movies %} 
-    <div class="movie-card" onclick="showPopup()">
+    <div class="movie-card" onclick="showPopup({{movie | json_encode | safe }})">
         {% if movie.Poster  %}
-
-        <!-- Movie Poster -->
-        <img 
-            src="{{ movie.Poster }}" 
-            alt="{{ movie.Title }} Poster" 
-            style="width: 100%; border-radius: 8px;" 
-        />
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr);">
+            <!-- Movie Poster -->
+            <img 
+                src="{{ movie.Poster }}" 
+                alt="{{ movie.Title }} Poster" 
+                style="width: 95%; border-radius: 8px;" 
+            />
+            <div>{{movie.Plot}}</div>
+        </div>
+        {% endif %}
+        {% if movie.Error  %}
+        <pre>{{movie.Error}}</pre>
+        
         {% endif %}
 
         <!-- Movie Title -->
         <div 
             style="text-align: center; margin-top: 10px;">
-            {{ movie.Title }}
+            <h2>{{ movie.Title }}</h2>
         </div>
     </div>
 {% endfor %}

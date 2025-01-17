@@ -115,7 +115,7 @@ async fn movies(state: &State<AppState>) -> Template {
 
         match serde_json::from_str::<MovieMetadata>(&metadata) {
             Ok(md) => {
-                println!("Parsed metadata: {:?}", md);
+                //println!("Parsed metadata: {:?}", md);
 
                 movies.push(md); 
                     // Add the structured object to the list
@@ -125,13 +125,7 @@ async fn movies(state: &State<AppState>) -> Template {
             }
         }
         
-        //if let Ok(metadata) = fetch_metadata(&state, &title).await {
-            
-        //}
     }
-
-    //Json(movies)
-
 
     Template::render("movie_card", context! { movies })
 }
