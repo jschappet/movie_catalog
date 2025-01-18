@@ -1491,6 +1491,7 @@ name = "movie_catalog"
 version = "0.1.0"
 dependencies = [
  "dotenv",
+ "regex",
  "reqwest",
  "rocket",
  "rocket_dyn_templates",

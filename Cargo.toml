@@ -12,6 +12,7 @@ sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio-native-tls"] }
 
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-reqwest = "0.12.12"
+reqwest = { version = "0.12.12",  features = ["json"] }
 rocket_dyn_templates = { version = "0.2.0", features = ["tera"] }
+regex = "1.11.1"
 
