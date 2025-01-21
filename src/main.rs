@@ -5,6 +5,7 @@ use regex::Regex;
 
 // use rocket::serde::{Deserialize, Serialize};
 use rocket::fs::{FileServer, NamedFile};
+use rocket::time::format_description::parse;
 use rocket::State;
 use std::path::Path;
 //use std::sync::Mutex;
@@ -38,7 +39,7 @@ async fn get_movies(state: &State<AppState>) -> Template {
 
     let db = &state.db_pool;
 
-    let rows = query("SELECT title, metadata FROM movies order by title")
+    let rows = query("SELECT title, source, metadata FROM movies order by title")
         .fetch_all(db)
         .await
         .expect("Failed to fetch movies");
@@ -47,11 +48,12 @@ async fn get_movies(state: &State<AppState>) -> Template {
     for row in rows {
         //let title: String = row.get("title");
         let metadata: String = row.get("metadata");
+        //let source: String = row.get("source");
 
         match serde_json::from_str::<MovieMetadata>(&metadata) {
-            Ok(md) => {
-                //println!("Parsed metadata: {:?}", md);
-
+            Ok( md) => {
+                //println!("Source: {:?}", source);
+                //md.source = Some(source);
                 movies.push(md); 
                     // Add the structured object to the list
             }
@@ -64,6 +66,30 @@ async fn get_movies(state: &State<AppState>) -> Template {
 
     Template::render("movie_card", context! { movies })
 }
+
+#[get("/missingdata")]
+async fn get_missing_data(state: &State<AppState>) ->  String  {
+
+    let db = &state.db_pool;
+
+    let rows = query("SELECT title, source FROM movies  WHERE json_extract(metadata, '$.Response') ='False' order by title")
+        .fetch_all(db)
+        .await
+        .expect("Failed to fetch movies");
+
+    let mut movies = Vec::new();
+    for row in rows {
+        let title: String = row.get("title");
+        let source: String = row.get("source");
+        //let source: String = row.get("source");
+        movies.push(format!("{}\t{}", title, source)); 
+        
+
+    }
+
+    movies.join("\n")
+}
+
 
 
 // Fallback to serve the `index.html` file when no route matches
@@ -144,6 +170,13 @@ async fn upload_movies(state: &State<AppState>, data: String) -> &'static str {
             return "Invalid JSON format";
         }
     };
+
+    let source = match parsed_data["source"].as_str() {
+        Some(value) => value.to_string(), // Convert &str to String
+        None => "default_value".to_string(), // Provide a default value or handle the missing case
+    };
+    println!("Source: {:?}", source);
+
     if let Some(titles) = parsed_data["titles"].as_array() {
 
         for title in titles {
@@ -152,34 +185,43 @@ async fn upload_movies(state: &State<AppState>, data: String) -> &'static str {
                     title.as_str().unwrap_or_default()).await;
             match meta {
                 Ok(meta) => {
-                    println!("{:?}", meta);
-
+                    //println!("{:?}", meta);
                     let mut metadata: MovieMetadata = serde_json::from_str(&meta)
                         .expect("ERROR");
 
-                    let metadata_json = serde_json::to_string(&meta).expect("Failed to serialize metadata");
-                    println!("{}", metadata_json);
+                    //let metadata_json = serde_json::to_string(&meta).expect("Failed to serialize metadata");
+                    // println!("{}", metadata_json);
                     if metadata.response == "False" {
                         metadata.title = Some(String::from(title.as_str().unwrap_or(""))); 
                     } 
+                    metadata.source = Some(source.clone());
                     metadata.plot = escape_plot(metadata.plot);
                     metadata.title = escape_plot(metadata.title);
                     
 
-                    sqlx::query("INSERT INTO movies (title, metadata) VALUES (?, ?)")
-                    .bind(title.clone())
-                    .bind(serde_json::json!(metadata))
-                    .execute(db)
-                    .await
-                    .expect("Failed to insert movie");
+                    match sqlx::query("INSERT INTO movies (title, year, metadata, source) VALUES (?, ?, ?, ?)")
+                        .bind(title.clone())
+                        .bind(metadata.year.clone())
+                        .bind(serde_json::json!(metadata))
+                        .bind(source.clone())
+                        .execute(db)
+                        .await
+                    {
+                        Ok(_) => println!("Movie inserted successfully: {} ({:?})", title, metadata.year.unwrap()),
+                        Err(sqlx::Error::Database(err)) if err.code().unwrap_or_default() == "2067" => {
+                            println!("Duplicate movie found: {} ({:?})", title, metadata.year);
+                        }
+                        Err(err) => eprintln!("Unexpected error: {}", err),
+                    };
 
                     
                 
-                    println!("Done Update: {}", title);
+                    //println!("Done Update: {}", title);
                 }
                 Err(e) => {
-                    sqlx::query("INSERT INTO movies (title) VALUES (?)")
+                    sqlx::query("INSERT INTO movies (title, source) VALUES (?, ?)")
                         .bind(title.clone())
+                        .bind(source.clone())
                         .execute(db)
                         .await
                         .expect("Failed to insert movie");
@@ -211,7 +253,7 @@ async fn rocket() -> _ {
 
     rocket::build()
         .manage(app_state) // Add shared state
-        .mount("/", routes![get_movies, upload_movies, delete_metadata])
+        .mount("/", routes![get_movies, upload_movies, delete_metadata, get_missing_data])
         .mount("/foo", routes![serve_index])
         .mount("/", FileServer::from("static")) // Serve static files
         .attach(Template::fairing())

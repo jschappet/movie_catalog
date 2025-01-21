@@ -3,3 +3,10 @@ log = "debug"
 
 [release]
 log = "critical"
+
+[default.limits]
+form = "20 MiB"
+json = "20 MiB"
+msgpack = "2 MiB"
+"file/jpg" = "5 MiB"
+String = "20 MiB"

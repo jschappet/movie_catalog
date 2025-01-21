@@ -12,7 +12,7 @@ pub struct MovieList {
 #[serde(rename_all = "PascalCase")]
 pub struct MovieMetadata {
     pub title:  Option<String>,
-    year:  Option<String>,
+    pub year:  Option<String>,
     rated:  Option<String>,
     released:  Option<String>,
     runtime:  Option<String>,
@@ -43,6 +43,8 @@ pub struct MovieMetadata {
     pub response: String,
     #[serde(rename = "Error")]
     error: Option<String>,
+    pub source:  Option<String>,
+
 }
 
 #[derive(Serialize, Deserialize, Debug, Encode, sqlx::Type)]

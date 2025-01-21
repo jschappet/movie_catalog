@@ -20,6 +20,8 @@
         <div 
             style="text-align: center; margin-top: 10px;">
             <h2>{{ movie.Title }}</h2>
+            <p>{{ movie.Source }}</p>
+
         </div>
     </div>
 {% endfor %}
