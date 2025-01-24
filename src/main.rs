@@ -4,7 +4,11 @@ extern crate rocket;
 use regex::Regex;
 
 // use rocket::serde::{Deserialize, Serialize};
-use rocket::fs::{FileServer, NamedFile};
+use rocket::fs::{FileServer, NamedFile, TempFile};
+use rocket::response::content::RawHtml;
+use rocket::form::Form;
+
+
 use rocket::time::format_description::parse;
 use rocket::State;
 use std::path::Path;
@@ -12,6 +16,8 @@ use std::path::Path;
 use rocket_dyn_templates::{Template, context};
 //use sqlx::types::Json;
 use sqlx::query;
+use rocket::tokio::fs;
+
 
 use dotenv::dotenv;
 use std::env;
@@ -24,6 +30,54 @@ use movies::MovieMetadata;
 mod db;
 use db::{init_db, DbPool};
 
+#[derive(FromForm)]
+struct FileUpload<'r> {
+    file: TempFile<'r>,
+}
+
+#[post("/saved", data = "<file_upload>")]
+async fn saved_file(mut file_upload: Form<FileUpload<'_>>) -> &'static str {
+    // Define the upload directory
+    let upload_dir = "./uploads";
+
+    // Ensure the directory exists
+    fs::create_dir_all(upload_dir)
+        .await
+        .expect("Failed to create upload directory");
+
+    // Save the file to the upload directory
+    if let Some(filename) = file_upload.file.name() {
+        let save_path = format!("{}/{}", upload_dir, filename);
+        if let Err(e) = file_upload.file.persist_to(save_path).await {
+            eprintln!("Failed to save file: {}", e);
+            return "Failed to save file.";
+        }
+        "File uploaded successfully!"
+    } else {
+        "No file was uploaded."
+    }
+}
+
+#[get("/save")]
+async fn save_file() -> RawHtml<&'static str> {
+    RawHtml(
+        r#"
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Upload File</title>
+        </head>
+        <body>
+            <h1>File Upload</h1>
+            <form action="/saved" method="post" enctype="multipart/form-data">
+                <input type="file" name="file" required />
+                <button type="submit">Upload</button>
+            </form>
+        </body>
+        </html>
+        "#,
+    )
+}
 
 // Application state
 #[derive(Clone)]
@@ -253,7 +307,8 @@ async fn rocket() -> _ {
 
     rocket::build()
         .manage(app_state) // Add shared state
-        .mount("/", routes![get_movies, upload_movies, delete_metadata, get_missing_data])
+        .mount("/", routes![get_movies, upload_movies, delete_metadata,
+		 get_missing_data, saved_file, save_file])
         .mount("/foo", routes![serve_index])
         .mount("/", FileServer::from("static")) // Serve static files
         .attach(Template::fairing())
