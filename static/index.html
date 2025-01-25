@@ -153,12 +153,21 @@ h1 {
         <p><strong>Director:</strong> <span id="popup-director"></span></p>
         <p><strong>Plot:</strong> <span id="popup-plot"></span></p>
         <p><strong>Rotten Tomatoes Score:</strong> <span id="popup-imdbRating"></span></p>
+        <button id="movie-refresh">Refresh MetaData</button>
+
         <button onclick="closePopup()">Close</button>
     </div>
 
     <script>
         // Show popup with metadata
+        function refreshdata(movieId) {
+            console.log(movieId);
+            htmx.ajax('GET', '/refreshdata/' + movieId, { target: '#movie-refresh'});
+        }
+        
         function showPopup(movie) {
+            var mr = document.getElementById('movie-refresh')            
+            mr.setAttribute("onclick", "refreshdata(" + movie.Id+")");
             document.getElementById('popup-title').textContent = movie.Title;
             document.getElementById('popup-year').textContent = movie.Year;
             document.getElementById('popup-genre').textContent = movie.Genre;
@@ -168,10 +177,12 @@ h1 {
 
             document.getElementById('overlay').style.display = 'block';
             document.getElementById('popup').style.display = 'block';
+            htmx.process();
         }
 
         // Close popup
         function closePopup() {
+            var mr = document.getElementById('movie-refresh').textContent = "Refresh Data";          
             document.getElementById('overlay').style.display = 'none';
             document.getElementById('popup').style.display = 'none';
         }

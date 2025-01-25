@@ -11,6 +11,7 @@ pub struct MovieList {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct MovieMetadata {
+    pub id:  Option<u16>,
     pub title:  Option<String>,
     pub year:  Option<String>,
     rated:  Option<String>,

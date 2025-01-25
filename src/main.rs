@@ -93,7 +93,7 @@ async fn get_movies(state: &State<AppState>) -> Template {
 
     let db = &state.db_pool;
 
-    let rows = query("SELECT title, source, metadata FROM movies order by title")
+    let rows = query("SELECT id, title, source, metadata FROM movies order by title")
         .fetch_all(db)
         .await
         .expect("Failed to fetch movies");
@@ -102,12 +102,15 @@ async fn get_movies(state: &State<AppState>) -> Template {
     for row in rows {
         //let title: String = row.get("title");
         let metadata: String = row.get("metadata");
+        let id: u16 = row.get("id");
+
         //let source: String = row.get("source");
 
         match serde_json::from_str::<MovieMetadata>(&metadata) {
-            Ok( md) => {
+            Ok(mut md) => {
                 //println!("Source: {:?}", source);
                 //md.source = Some(source);
+                md.id = Some(id);
                 movies.push(md); 
                     // Add the structured object to the list
             }
@@ -121,22 +124,69 @@ async fn get_movies(state: &State<AppState>) -> Template {
     Template::render("movie_card", context! { movies })
 }
 
+
+
+#[get("/refreshdata/<id>")]
+async fn refresh_metadata(state: &State<AppState>, id: u16) ->  String  {
+    let db = &state.db_pool;
+
+    let rows = query("SELECT id, source, title, metadata FROM movies  WHERE id = ?")
+        .bind(id)
+        .fetch_all(db)
+        .await
+        .expect("Failed to fetch movies");
+        let mut movie = String::new();
+        for row in rows {
+            let title: String = row.get("title");
+            let source: String = row.get("source");
+
+            update_metadata(state, title.clone(), source).await;
+            movie = String::from(title);
+        }
+        format!("Updated Movie: {}", movie)
+}
+
+
+
+#[get("/movie/<id>")]
+async fn get_movie(state: &State<AppState>, id: &str) ->  String  {
+    let db = &state.db_pool;
+
+    let rows = query("SELECT id,year, source, title, metadata FROM movies  WHERE id = ?")
+        .bind(id)
+        .fetch_all(db)
+        .await
+        .expect("Failed to fetch movies");
+        let mut movie = String::new();
+        for row in rows {
+            //let title: String = row.get("title");
+            let md: String = row.get("metadata");
+            let year: String = row.get("year");
+            println!("Year: {}", year);
+            
+            movie = md;
+        }
+        format!("{}", movie)
+}
+
+
 #[get("/missingdata")]
 async fn get_missing_data(state: &State<AppState>) ->  String  {
 
     let db = &state.db_pool;
 
-    let rows = query("SELECT title, source FROM movies  WHERE json_extract(metadata, '$.Response') ='False' order by title")
+    let rows = query("SELECT id, title, source FROM movies  WHERE json_extract(metadata, '$.Response') ='False' order by title")
         .fetch_all(db)
         .await
         .expect("Failed to fetch movies");
 
     let mut movies = Vec::new();
     for row in rows {
-        let title: String = row.get("title");
-        let source: String = row.get("source");
+        //let title: String = row.get("title");
         //let source: String = row.get("source");
-        movies.push(format!("{}\t{}", title, source)); 
+        let id: u16 = row.get("id");
+        //let source: String = row.get("source");
+        movies.push(format!("/refreshdata/{}", id)); 
         
 
     }
@@ -144,7 +194,18 @@ async fn get_missing_data(state: &State<AppState>) ->  String  {
     movies.join("\n")
 }
 
+// Fallback to serve the `index.html` file when no route matches
+#[delete("/movie/<id>")]
+async fn delete_movie(state: &State<AppState>, id: String) ->  &'static str {
+    let db: &sqlx::Pool<sqlx::Sqlite> = &state.db_pool;
 
+    sqlx::query("DELETE FROM movies where id=?")
+    .bind(id)
+    .execute(db)
+    .await
+    .expect("Failed to delete movie");
+    "Movie Deleted"
+}
 
 // Fallback to serve the `index.html` file when no route matches
 #[get("/")]
@@ -212,10 +273,76 @@ async fn fetch_metadata(state: &AppState, title: &str) -> Result<String, reqwest
     
 }
 
+async fn update_metadata(state: &State<AppState>, title: String, source: String) {
+    let db: &sqlx::Pool<sqlx::Sqlite> = &state.db_pool;
+    let meta = fetch_metadata(&state, 
+        title.as_str()).await;
+
+    match meta {
+        Ok(meta) => {
+            println!("{:?}", meta);
+            let mut metadata: MovieMetadata = serde_json::from_str(&meta)
+                .expect("ERROR");
+
+            //let metadata_json = serde_json::to_string(&meta).expect("Failed to serialize metadata");
+            // println!("{}", metadata_json);
+            if metadata.response == "False" {
+                metadata.title = Some(String::from(title.as_str())); 
+            } 
+            metadata.source = Some(source.clone());
+            metadata.plot = escape_plot(metadata.plot);
+            metadata.title = escape_plot(metadata.title);
+            
+            match sqlx::query("UPDATE movies SET metadata=? where title=?")
+                .bind(serde_json::json!(metadata))
+                .bind(title.clone())
+                //.bind(metadata.year.clone())
+               
+                .execute(db)
+                .await
+            {
+                Ok(opt) => println!("Movie({})  updated successfully: {} ({:?})", opt.rows_affected() , title, metadata.year.unwrap()),
+                Err(sqlx::Error::Database(err)) if err.code().unwrap_or_default() == "2067" => {
+                    match sqlx::query("INSERT INTO movies (title, year, metadata, source) VALUES (?, ?, ?, ?)")
+                    .bind(title.clone())
+                    .bind(metadata.year.clone())
+                    .bind(serde_json::json!(metadata))
+                    .bind(source.clone())
+                    .execute(db)
+                    .await
+                {
+                    Ok(_) => println!("Movie inserted successfully: {} ({:?})", title, metadata.year.unwrap()),
+                    Err(sqlx::Error::Database(err)) if err.code().unwrap_or_default() == "2067" => {
+                        println!("Duplicate movie found: {} ({:?})", title, metadata.year);
+                    }
+                    Err(err) => eprintln!("Unexpected error: {}", err),
+                };
+                }
+                Err(err) => eprintln!("Unexpected error: {}", err),
+            };
+
+            
+
+            
+        
+            //println!("Done Update: {}", title);
+        }
+        Err(e) => {
+            sqlx::query("INSERT INTO movies (title, source) VALUES (?, ?)")
+                .bind(title.clone())
+                .bind(source.clone())
+                .execute(db)
+                .await
+                .expect("Failed to insert movie");
+            eprintln!("Failed to fetch metadata for {}: {:?}", title, e);
+            () // Wrap it in a vector to return it as JSON
+        }
+    }
+}
+
 // Handler for file uploads
 #[post("/upload", data = "<data>")]
 async fn upload_movies(state: &State<AppState>, data: String) -> &'static str {
-    let db: &sqlx::Pool<sqlx::Sqlite> = &state.db_pool;
     
     // Parse JSON data
     let parsed_data: serde_json::Value = match serde_json::from_str(&data) {
@@ -229,60 +356,17 @@ async fn upload_movies(state: &State<AppState>, data: String) -> &'static str {
         Some(value) => value.to_string(), // Convert &str to String
         None => "default_value".to_string(), // Provide a default value or handle the missing case
     };
-    println!("Source: {:?}", source);
+    println!("Source: {:?}", source.clone());
 
     if let Some(titles) = parsed_data["titles"].as_array() {
 
-        for title in titles {
-            
-            let meta = fetch_metadata(&state, 
-                    title.as_str().unwrap_or_default()).await;
-            match meta {
-                Ok(meta) => {
-                    //println!("{:?}", meta);
-                    let mut metadata: MovieMetadata = serde_json::from_str(&meta)
-                        .expect("ERROR");
-
-                    //let metadata_json = serde_json::to_string(&meta).expect("Failed to serialize metadata");
-                    // println!("{}", metadata_json);
-                    if metadata.response == "False" {
-                        metadata.title = Some(String::from(title.as_str().unwrap_or(""))); 
-                    } 
-                    metadata.source = Some(source.clone());
-                    metadata.plot = escape_plot(metadata.plot);
-                    metadata.title = escape_plot(metadata.title);
-                    
-
-                    match sqlx::query("INSERT INTO movies (title, year, metadata, source) VALUES (?, ?, ?, ?)")
-                        .bind(title.clone())
-                        .bind(metadata.year.clone())
-                        .bind(serde_json::json!(metadata))
-                        .bind(source.clone())
-                        .execute(db)
-                        .await
-                    {
-                        Ok(_) => println!("Movie inserted successfully: {} ({:?})", title, metadata.year.unwrap()),
-                        Err(sqlx::Error::Database(err)) if err.code().unwrap_or_default() == "2067" => {
-                            println!("Duplicate movie found: {} ({:?})", title, metadata.year);
-                        }
-                        Err(err) => eprintln!("Unexpected error: {}", err),
-                    };
-
-                    
-                
-                    //println!("Done Update: {}", title);
-                }
-                Err(e) => {
-                    sqlx::query("INSERT INTO movies (title, source) VALUES (?, ?)")
-                        .bind(title.clone())
-                        .bind(source.clone())
-                        .execute(db)
-                        .await
-                        .expect("Failed to insert movie");
-                    eprintln!("Failed to fetch metadata for {}: {:?}", title, e);
-                    () // Wrap it in a vector to return it as JSON
-                }
-            }   
+        for value in titles {
+            let title = match value.as_str() {
+                Some(value) => value.to_string(), // Convert &str to String
+                None => "default_value".to_string(), // Provide a default value or handle the missing case
+            };
+            update_metadata(state, title, source.clone()).await;
+               
         }
     }
     "Movies uploaded successfully!"
@@ -308,7 +392,9 @@ async fn rocket() -> _ {
     rocket::build()
         .manage(app_state) // Add shared state
         .mount("/", routes![get_movies, upload_movies, delete_metadata,
-		 get_missing_data, saved_file, save_file])
+		 get_missing_data, saved_file, save_file, 
+         refresh_metadata,get_movie,
+         delete_movie])
         .mount("/foo", routes![serve_index])
         .mount("/", FileServer::from("static")) // Serve static files
         .attach(Template::fairing())
