@@ -11,6 +11,7 @@ pub async fn init_db(database_url: &str) -> DbPool {
             id INTEGER PRIMARY KEY,
             title TEXT NOT NULL ,
             source TEXT,
+            imdbid TEXT UNIQUE,
             year INTEGER,
             metadata JSON,
             UNIQUE(title, year)

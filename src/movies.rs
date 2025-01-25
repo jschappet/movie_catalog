@@ -11,7 +11,7 @@ pub struct MovieList {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct MovieMetadata {
-    pub id:  Option<u16>,
+    pub id:  Option<i32>,
     pub title:  Option<String>,
     pub year:  Option<String>,
     rated:  Option<String>,
@@ -33,7 +33,7 @@ pub struct MovieMetadata {
     #[serde(rename = "imdbVotes")]
     imdb_votes:  Option<String>,
     #[serde(rename = "imdbID")]
-    imdb_id:  Option<String>,
+    pub imdb_id:  Option<String>,
     #[serde(rename = "Type")]
     movie_type:  Option<String>, // Reserved keyword, escaped
     dvd: Option<String>,
@@ -45,6 +45,7 @@ pub struct MovieMetadata {
     #[serde(rename = "Error")]
     error: Option<String>,
     pub source:  Option<String>,
+    pub first_letter:  Option<String>,
 
 }
 

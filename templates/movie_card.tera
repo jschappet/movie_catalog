@@ -1,4 +1,12 @@
+{% set_global current_letter = "" %}
 {% for movie in movies %} 
+
+    {% if movie.FirstLetter | lower != current_letter | lower  %}
+        {% set_global current_letter = movie.FirstLetter | lower %}
+        <!-- Add an anchor for the current letter -->
+        <a id="{{ current_letter | lower }}"></a>
+        <h1 class="full-width" style="margin-top: 20px;">{{ current_letter | upper }}</h1>
+    {% endif %}
     <div class="movie-card" onclick='showPopup({{movie | json_encode }})'>
         {% if movie.Poster  %}
         <div style="display: grid; grid-template-columns: repeat(2, 1fr);">
@@ -21,6 +29,9 @@
             style="text-align: center; margin-top: 10px;">
             <h2>{{ movie.Title }}</h2>
             <p>{{ movie.Source }}</p>
+            <p>
+                <a href="/movie/{{ movie.imdbID }}" target="_blank">Direct Link</a>
+            </p>
 
         </div>
 

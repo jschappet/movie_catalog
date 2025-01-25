@@ -87,13 +87,21 @@ struct AppState {
     client: reqwest::Client,
 }
 
+fn get_first_letter(input: Option<String>) -> String {
+    input.unwrap().chars().next()
+        .map(|c| c.to_string()).unwrap_or("0".to_string())
+}
 
 #[get("/movies")]
 async fn get_movies(state: &State<AppState>) -> Template {
 
     let db = &state.db_pool;
 
-    let rows = query("SELECT id, title, source, metadata FROM movies order by title")
+    let rows = query(r#"
+        SELECT imdbid, title, source, metadata 
+        FROM movies 
+        ORDER by json_extract(metadata , '$.Title') 
+    "#)
         .fetch_all(db)
         .await
         .expect("Failed to fetch movies");
@@ -102,7 +110,6 @@ async fn get_movies(state: &State<AppState>) -> Template {
     for row in rows {
         //let title: String = row.get("title");
         let metadata: String = row.get("metadata");
-        let id: u16 = row.get("id");
 
         //let source: String = row.get("source");
 
@@ -110,7 +117,8 @@ async fn get_movies(state: &State<AppState>) -> Template {
             Ok(mut md) => {
                 //println!("Source: {:?}", source);
                 //md.source = Some(source);
-                md.id = Some(id);
+                md.first_letter = Some(get_first_letter(md.title.clone()));
+                    
                 movies.push(md); 
                     // Add the structured object to the list
             }
@@ -127,10 +135,10 @@ async fn get_movies(state: &State<AppState>) -> Template {
 
 
 #[get("/refreshdata/<id>")]
-async fn refresh_metadata(state: &State<AppState>, id: u16) ->  String  {
+async fn refresh_metadata(state: &State<AppState>, id: &str) ->  String  {
     let db = &state.db_pool;
 
-    let rows = query("SELECT id, source, title, metadata FROM movies  WHERE id = ?")
+    let rows = query("SELECT id, source, title, metadata FROM movies  WHERE imdbid = ?")
         .bind(id)
         .fetch_all(db)
         .await
@@ -147,27 +155,49 @@ async fn refresh_metadata(state: &State<AppState>, id: u16) ->  String  {
 }
 
 
-
 #[get("/movie/<id>")]
-async fn get_movie(state: &State<AppState>, id: &str) ->  String  {
+async fn get_movie(state: &State<AppState>, id: &str) -> Template {
     let db = &state.db_pool;
+    println!("ID: {}", id);
 
-    let rows = query("SELECT id,year, source, title, metadata FROM movies  WHERE id = ?")
+    // Query the database
+    let rows = query("SELECT id, year, source, title, metadata FROM movies WHERE imdbid = ?")
         .bind(id)
         .fetch_all(db)
-        .await
-        .expect("Failed to fetch movies");
-        let mut movie = String::new();
-        for row in rows {
-            //let title: String = row.get("title");
-            let md: String = row.get("metadata");
-            let year: String = row.get("year");
-            println!("Year: {}", year);
-            
-            movie = md;
+        .await;
+
+    // Handle query errors gracefully
+    let rows = match rows {
+        Ok(rows) => rows,
+        Err(e) => {
+            eprintln!("Database query failed: {:?}", e);
+            return Template::render("error", context! { id });
         }
-        format!("{}", movie)
+    };
+
+    // Process the results
+    for row in rows {
+        let metadata: String = row.get("metadata");
+        let year: i32 = row.get("year");
+        println!("Year: {}", year);
+
+        // Attempt to deserialize metadata
+        match serde_json::from_str::<MovieMetadata>(&metadata) {
+            Ok(md) => {
+                return Template::render("movie_view", context! { movie: md });
+            }
+            Err(_) => {
+                eprintln!("Failed to parse metadata: {}", metadata);
+                return  Template::render("error", context! { id });
+
+            }
+        }
+    }
+
+    // If no rows were found, render an error template
+    Template::render("error", context! { id })
 }
+
 
 
 #[get("/missingdata")]
@@ -196,10 +226,9 @@ async fn get_missing_data(state: &State<AppState>) ->  String  {
 
 // Fallback to serve the `index.html` file when no route matches
 #[delete("/movie/<id>")]
-async fn delete_movie(state: &State<AppState>, id: String) ->  &'static str {
+async fn delete_movie(state: &State<AppState>, id: &str) ->  &'static str {
     let db: &sqlx::Pool<sqlx::Sqlite> = &state.db_pool;
-
-    sqlx::query("DELETE FROM movies where id=?")
+    sqlx::query("DELETE FROM movies where imdbid=?")
     .bind(id)
     .execute(db)
     .await
@@ -280,7 +309,7 @@ async fn update_metadata(state: &State<AppState>, title: String, source: String)
 
     match meta {
         Ok(meta) => {
-            println!("{:?}", meta);
+            //println!("{:?}", meta);
             let mut metadata: MovieMetadata = serde_json::from_str(&meta)
                 .expect("ERROR");
 
@@ -292,34 +321,41 @@ async fn update_metadata(state: &State<AppState>, title: String, source: String)
             metadata.source = Some(source.clone());
             metadata.plot = escape_plot(metadata.plot);
             metadata.title = escape_plot(metadata.title);
-            
-            match sqlx::query("UPDATE movies SET metadata=? where title=?")
-                .bind(serde_json::json!(metadata))
+            match sqlx::query("INSERT INTO movies (title, imdbid, year, metadata, source) VALUES (?, ?, ?, ?, ?)")
                 .bind(title.clone())
-                //.bind(metadata.year.clone())
-               
+                .bind(metadata.imdb_id.clone())
+                .bind(metadata.year.clone())
+                .bind(serde_json::json!(metadata))
+                .bind(source.clone())
                 .execute(db)
                 .await
-            {
-                Ok(opt) => println!("Movie({})  updated successfully: {} ({:?})", opt.rows_affected() , title, metadata.year.unwrap()),
-                Err(sqlx::Error::Database(err)) if err.code().unwrap_or_default() == "2067" => {
-                    match sqlx::query("INSERT INTO movies (title, year, metadata, source) VALUES (?, ?, ?, ?)")
-                    .bind(title.clone())
-                    .bind(metadata.year.clone())
+        {
+            Ok(_) => {
+                if let Some(year) = metadata.year {
+                    println!("Movie inserted successfully: {} ({})", title, year);
+                } else {
+                    println!("Movie inserted successfully: {} (Year not provided)", title);
+                }
+            }            
+            Err(sqlx::Error::Database(err)) if err.code().unwrap_or_default() == "2067" => {
+                match sqlx::query("UPDATE movies SET metadata=? where imdbid=?")
                     .bind(serde_json::json!(metadata))
-                    .bind(source.clone())
+                    .bind(metadata.imdb_id)
+                    //.bind(metadata.year.clone())
+                
                     .execute(db)
                     .await
-                {
-                    Ok(_) => println!("Movie inserted successfully: {} ({:?})", title, metadata.year.unwrap()),
-                    Err(sqlx::Error::Database(err)) if err.code().unwrap_or_default() == "2067" => {
-                        println!("Duplicate movie found: {} ({:?})", title, metadata.year);
-                    }
-                    Err(err) => eprintln!("Unexpected error: {}", err),
-                };
-                }
-                Err(err) => eprintln!("Unexpected error: {}", err),
-            };
+                    {
+                        Ok(opt) => 
+                            println!("Movie({})  updated successfully: {} ({:?})", opt.rows_affected() , 
+                                title, metadata.year.clone().unwrap()),
+                        Err(err) => eprintln!("Unexpected error: {}", err),
+                    };
+                println!("Duplicate movie found: {} ({:?})", title, metadata.year);
+            }
+            Err(err) => eprintln!("Unexpected error: {}", err),
+        };
+            
 
             
 

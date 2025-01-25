@@ -1474,7 +1474,6 @@ name = "movie_catalog"
 version = "0.1.0"
 dependencies = [
  "dotenv",
- "idna",
  "regex",
  "reqwest",
  "rocket",

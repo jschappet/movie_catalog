@@ -22,10 +22,6 @@ h1 {
     margin-top: 20px;
 }
 
-.full-width {
-    grid-column: 1 / -1;
-    margin-top: 20px;
-
 .movie-card {
     cursor: pointer;
     padding: 10px;
@@ -146,43 +142,46 @@ h1 {
 </head>
 <body>
     <h1>Movie Metadata Viewer</h1>
-<!-- Navigation Menu -->
+
     
-    <div id="movie-grid" hx-get="/movies" hx-trigger="load"></div>
+<div class="movie-card" onclick='showPopup({{movie | json_encode }})'>
+    {% if movie.Poster  %}
+    <div style="display: grid; grid-template-columns: repeat(2, 1fr);">
+        <!-- Movie Poster -->
+        <img 
+            src="{{ movie.Poster }}" 
+            alt="{{ movie.Title }} Poster" 
+            style="width: 95%; border-radius: 8px;" 
+        />
+        <div>{{movie.Plot}}</div>
+    </div>
+    {% endif %}
+    {% if movie.Error  %}
+    <pre>{{movie.Error}}</pre>
+    
+    {% endif %}
 
-    <div class="overlay" id="overlay"></div>
-    <div class="popup" id="popup">
-        <h2 id="popup-title"></h2>
-        <p><strong>Year:</strong> <span id="popup-year"></span></p>
-        <p><strong>Genre:</strong> <span id="popup-genre"></span></p>
-        <p><strong>Director:</strong> <span id="popup-director"></span></p>
-        <p><strong>Plot:</strong> <span id="popup-plot"></span></p>
-        <p><strong>Rotten Tomatoes Score:</strong> <span id="popup-imdbRating"></span></p>
-        <button id="movie-refresh">Refresh MetaData</button>
+    <!-- Movie Title -->
+    <div 
+        style="text-align: center; margin-top: 10px;">
+        <h2>{{ movie.Title }}</h2>
+        <p>{{ movie.Source }}</p>
+        <button id="movie-delete" onclick="deleteMovie('{{movie.imdbID}}')">Delete</button>
 
-        <button onclick="closePopup()">Close</button>
     </div>
 
-    <script>
-        // Show popup with metadata
-        function refreshdata(movieId) {
-            console.log(movieId);
-            htmx.ajax('GET', '/refreshdata/' + movieId, { target: '#movie-refresh'});
-        }
-        
-        function showPopup(movie) {
-            var mr = document.getElementById('movie-refresh')            
-            mr.setAttribute("onclick", "refreshdata(" + movie.Id+")");
-            document.getElementById('popup-title').textContent = movie.Title;
-            document.getElementById('popup-year').textContent = movie.Year;
-            document.getElementById('popup-genre').textContent = movie.Genre;
-            document.getElementById('popup-director').textContent = movie.Director;
-            document.getElementById('popup-plot').textContent = movie.Plot;
-            document.getElementById('popup-imdbRating').textContent = movie.imdbRating;
+</div>
 
-            document.getElementById('overlay').style.display = 'block';
-            document.getElementById('popup').style.display = 'block';
-            htmx.process();
+
+    <div class="overlay" id="overlay"></div>
+    
+
+    <script>
+      
+        
+        function deleteMovie(movieId) {
+            console.log(movieId);
+            htmx.ajax('DELETE', '/movie/' + movieId, { target: '#movie-delete'});
         }
 
         // Close popup
@@ -208,3 +207,5 @@ h1 {
     </script>
 </body>
 </html>
+
+

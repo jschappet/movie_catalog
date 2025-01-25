@@ -1,19 +1,12 @@
 <!-- templates/test.html -->
+{% set_global current_letter = "" %}
 <h1>Test Template</h1>
 {% for movie in movies %} 
-<div class="movie-card" onclick="showPopup()">
-    <pre>{{ movie | json_encode }}</pre>
-    {% if movie.Poster  %}
-        <img 
-            src="{{ movie.Poster }}" 
-            alt="{{ movie.Title }} Poster" 
-            style="width: 100%; border-radius: 8px;" 
-            />
-
-{% endif %}
-
-
-
-    
-</div>
+    {% if movie.FirstLetter | lower != current_letter %}
+    {% set_global current_letter = movie.FirstLetter | lower %}
+------------ {{ current_letter }} ------------------
+'{{current_letter}}' '{{movie.FirstLetter}}' {{movie.Title}}
+    {% else %}
+'{{current_letter}}' '{{movie.FirstLetter}}' {{movie.Title}}
+    {% endif %}
 {% endfor %}

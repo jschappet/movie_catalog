@@ -1,0 +1,6 @@
+<!-- Navigation Menu -->
+<div id="alphabet-navigation" style="position: fixed; top: 10px; right: 10px; background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1);">
+    {% for letter in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' %}
+        <a href="#{{ letter  }}" style="margin-right: 5px;">{{ letter }}</a>
+    {% endfor %}
+</div>
