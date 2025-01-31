@@ -21,5 +21,34 @@ pub async fn init_db(database_url: &str) -> DbPool {
     .execute(&pool)
     .await
     .expect("Failed to create table");
+    sqlx::query(
+        r#"
+        CREATE VIRTUAL TABLE IF NOT EXISTS movies_fts USING fts5(title, description, content='movies', content_rowid='id');
+        -- Automatically insert new movies into the FTS table
+        CREATE TRIGGER movies_ai AFTER INSERT ON movies
+        BEGIN
+            INSERT INTO movies_fts(rowid, title, description) 
+            VALUES (new.id, new.title, new.description);
+        END;
+
+        -- Automatically update the FTS table when a movie is updated
+        CREATE TRIGGER movies_au AFTER UPDATE ON movies
+        BEGIN
+            DELETE FROM movies_fts WHERE rowid = old.id;
+            INSERT INTO movies_fts(rowid, title, description) 
+            VALUES (new.id, new.title, new.description);
+        END;
+
+        -- Automatically delete from the FTS table when a movie is removed
+        CREATE TRIGGER movies_ad AFTER DELETE ON movies
+        BEGIN
+            DELETE FROM movies_fts WHERE rowid = old.id;
+        END;
+
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("Failed to create table");
     pool
 }

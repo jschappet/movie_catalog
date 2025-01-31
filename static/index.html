@@ -147,9 +147,11 @@ h1 {
 <body>
     <h1>Movie Metadata Viewer</h1>
 <!-- Navigation Menu -->
-    
+    <input type="text" hx-get="/search" hx-trigger="keyup changed delay:300ms" hx-target="#results">
+    <div id="results"></div>
     <div id="movie-grid" hx-get="/movies" hx-trigger="load"></div>
-
+    
+    
     <div class="overlay" id="overlay"></div>
     <div class="popup" id="popup">
         <h2 id="popup-title"></h2>

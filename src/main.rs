@@ -132,7 +132,20 @@ async fn get_movies(state: &State<AppState>) -> Template {
     Template::render("movie_card", context! { movies })
 }
 
-
+/* #[get("/search?<query>")]
+async fn search(state: &State<AppState>, query: String) -> Template {
+    
+    let movies = query(
+        Movie,
+        "SELECT movies.* FROM movies 
+         JOIN movies_fts ON movies.id = movies_fts.rowid 
+         WHERE movies_fts MATCH ?",
+        search_query
+    )
+    .fetch_all(&state.db_pool)
+    .await?;
+    Template::render("partials/movie_list", context! { movies })
+} */
 
 #[get("/refreshdata/<id>")]
 async fn refresh_metadata(state: &State<AppState>, id: &str) ->  String  {
